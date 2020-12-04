@@ -1,6 +1,6 @@
 import qiime2.plugin
 from qiime2.plugin import (SemanticType, Str, Int, Float, Choices,
-                           MetadataColumn, Categorical, Numeric, Metadata)
+                           MetadataColumn, Categorical, Numeric, Metadata, Bool)
 import qiime2.plugin.model as model
 
 from q2_types.feature_table import (
@@ -209,13 +209,17 @@ def plot_enrichment(output_dir: str, enriched: pd.DataFrame):
         fl.write('</body></html>')
 
 
-def heatmap(output_dir: str, table: biom.Table, metadata: pd.DataFrame):
+def heatmap(output_dir: str, table: biom.Table, metadata: pd.DataFrame, sort_field: str = None, cluster: bool = True):
     metadata = metadata.to_dataframe()
     samples = table.ids(axis='sample')
     features = table.ids(axis='observation')
     metadata = metadata.filter(items=samples, axis='index')
     feature_metadata = pd.DataFrame(index=features, columns={'_feature_id': features, 'taxonomy': 'NA'})
     exp = ca.AmpliconExperiment(data=table.transpose().matrix_data, sample_metadata=metadata, feature_metadata=feature_metadata, sparse=False)
+    if sort_field is not None:
+        exp = exp.sort(sort_field)
+    if cluster:
+        exp = exp.cluster_features(10)
     exp.export_html(output_file=os.path.join(output_dir, 'index.html'))
     # exp.export_html(output_file=os.path.join(output_dir, 'index.html'))
 
@@ -294,7 +298,9 @@ plugin.visualizers.register_function(
 plugin.visualizers.register_function(
     function=heatmap,
     inputs={'table': FeatureTable[Frequency]},
-    parameters={'metadata': Metadata},
+    parameters={'metadata': Metadata,
+                'sort_field': Str,
+                'cluster': Bool},
     input_descriptions={
         'table': 'The table to plot'
     },
