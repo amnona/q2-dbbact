@@ -5,9 +5,9 @@ import qiime2.plugin.model as model
 
 from q2_types.feature_table import (
     FeatureTable, Frequency)
-from q2_types.feature_data import (FeatureData, Differential, Sequence)
+from q2_types.feature_data import (FeatureData, Differential, Sequence, Taxonomy, )
 from q2_types.sample_data import SampleData
-from q2_types.feature_data import DNAFASTAFormat
+from q2_types.feature_data import DNAFASTAFormat, TSVTaxonomyFormat
 import biom
 import pandas as pd
 import numpy as np
@@ -95,9 +95,26 @@ def _seqs_from_repseqs(data: pd.DataFrame, repseqs: DNAFASTAFormat):
     return data
 
 
-def enrichment(data: pd.DataFrame, repseqs: DNAFASTAFormat = None, source: str = 'dsfdr', method: str = 'groups', sig_threshold: float = 0.1) -> pd.DataFrame:
+def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_tsv: str = None, source: str = 'dsfdr', method: str = 'groups', sig_threshold: float = 0.1, ancom_stat: str = None) -> pd.DataFrame:
     ca.set_log_level('INFO')
     db = dbbact_calour.DBBact()
+    db.set_log_level('INFO')
+
+    # handle either diff (qza diffabundance artifact) or diff_tsv(tsv file resulting from diff abundance export i.e. ancom etc.)
+    if diff is None and diff_tsv is None:
+        raise ValueError('Need to supply either --i-diff or --p-diff-tsv differential results input file (none were supplied)')
+    if diff is not None and diff_tsv is not None:
+        raise ValueError('Need to supply either --i-diff or --p-diff-tsv differential results input file (both were supplied)')
+
+    if diff is not None:
+        data = diff
+    else:
+        try:
+            data = pd.read_csv(diff_tsv, sep='\t')
+            data.set_index(data.columns[0], drop=False, inplace=True)
+        except Exception as e:
+            print('failed to read diff_tsv file %s. Is is a valid tsv differential abundance file?' % diff_tsv)
+            raise e
 
     if repseqs is not None:
         data = _seqs_from_repseqs(data=data, repseqs=repseqs)
@@ -130,12 +147,41 @@ def enrichment(data: pd.DataFrame, repseqs: DNAFASTAFormat = None, source: str =
         field_name = vals[0]
         # we don't have p-values so do not reject any
         ndata = pd.DataFrame(data={'effect': ndata[vals[0]], 'reject': 1}, index=ndata.index)
+
     elif source == 'aldex2':
         ndata = pd.DataFrame(data={'dir': data['effect'] > 0,
                                    'pval': data['we.eBH'],
                                    'effect': data['effect'],
                                    'reject': data['we.eBH'] < sig_threshold}, index=ndata.index)
         ndata = ndata[ndata['reject'] == 1]
+
+    elif source == 'ancom':
+        # if user supplied the ancom stats file, use it to get significant (null hypothesis rejects)
+        # otherwise, use the sig_threshold for the W stat
+        ndata = pd.DataFrame(data={'dir': data['clr'] > 0,
+                                   'effect': data['clr'],
+                                   'pval': 0,
+                                   'reject': data['W'] > sig_threshold}, index=ndata['id'])
+        if ancom_stat is not None:
+            try:
+                rejects = pd.read_csv(ancom_stat, sep='\t', index_col=0)
+                ndata = ndata.join(rejects)
+                ndata['reject'] = ndata['Reject null hypothesis'] * 1
+            except Exception as e:
+                print('failed to read ancom-stat file %s. Is is a valid tsv differential abundance file?' % ancom_stat)
+                raise e
+
+    elif source == 'tsv':
+        if 'pval' not in data.columns:
+            raise ValueError('input tsv file does not contain "pval" column')
+        if 'effect' not in data.columns:
+            raise ValueError('input tsv file does not contain "effect" column')
+        if 'reject' not in data.columns:
+            data['reject'] = 1
+        ndata = pd.DataFrame(data={'dir': data['effect'] > 0,
+                                   'effect': data['effect'],
+                                   'pval': data['pval'],
+                                   'reject': data['reject']}, index=ndata['id'])
 
     else:
         raise ValueError('Unsupported source %s' % source)
@@ -170,9 +216,10 @@ def enrichment(data: pd.DataFrame, repseqs: DNAFASTAFormat = None, source: str =
     return df
 
 
-def draw_wordcloud_vis(output_dir: str, data: biom.Table, repseqs: DNAFASTAFormat = None, prev_thresh: float = 0.3):
+def draw_wordcloud_vis(output_dir: str, data: biom.Table, repseqs: DNAFASTAFormat = None, prev_thresh: float = 0.3, focus_terms: str = None):
     '''draw the wordcloud for features in the biom table and save outputs'''
     db = dbbact_calour.DBBact()
+    db.set_log_level('INFO')
 
     df = data.to_dataframe()
 
@@ -181,17 +228,31 @@ def draw_wordcloud_vis(output_dir: str, data: biom.Table, repseqs: DNAFASTAForma
 
     if len(df.iloc[0].name) == 32:
         raise ValueError('input table seems to contain hashes and not sequences. Please supply the rep-seqs.qza file.')
+
     exp = ca.AmpliconExperiment.from_pandas(df.T)
+    print('%d features in table before prevalence filtering' % len(exp.feature_metadata))
     exp = exp.filter_prevalence(prev_thresh)
-    f = db.draw_wordcloud(exp)
+    print('%d features in table remain after prevalence filtering (%f)' % (len(exp.feature_metadata), prev_thresh))
+    if focus_terms is not None:
+        focus_terms = focus_terms.split(',')
+        print('Using %d focus terms: %s' % (len(focus_terms), focus_terms))
+    print('getting term stats')
+    fscores, recall, precision, term_count, reduced_f = db.get_wordcloud_stats(exp=exp, focus_terms=focus_terms)
+    df = pd.DataFrame(data={'fscore': fscores, 'recall': recall, 'precision': precision, 'term_count': term_count, 'reduced_f': reduced_f})
+    df.to_csv(os.path.join(output_dir, 'scores.tsv'), sep='\t')
+    print('drawing wordcloud')
+    f = db.draw_wordcloud(exp, focus_terms=focus_terms)
     f.savefig(os.path.join(output_dir, 'wordcloud.pdf'))
     f.savefig(os.path.join(output_dir, 'wordcloud.svg'))
     with open(os.path.join(output_dir, 'index.html'), 'w') as fl:
         fl.write('<html><body>\n')
         fl.write('<h1>dbBact wordcloud</h1>\n')
         fl.write('<h2>prevalence threshold=%f</h2>\n' % prev_thresh)
-        fl.write('<img src="wordcloud.svg" alt="wordcloud">\n')
+        if focus_terms is not None:
+            fl.write('<h2>focus-terms: %s</h2>' % focus_terms)
+        fl.write('<br><img src="wordcloud.svg" alt="wordcloud">\n')
         fl.write('<a href="wordcloud.pdf">Download as PDF</a><br>\n')
+        fl.write('<a href="scores.tsv">Download scores as tsv</a><br>\n')
         fl.write('</body></html>')
 
 
@@ -209,38 +270,67 @@ def plot_enrichment(output_dir: str, enriched: pd.DataFrame):
         fl.write('</body></html>')
 
 
-def heatmap(output_dir: str, table: biom.Table, metadata: pd.DataFrame, sort_field: str = None, cluster: bool = True):
+def heatmap(output_dir: str, table: biom.Table, metadata: pd.DataFrame, sort_field: str = None, cluster: bool = True, min_abundance: float = 10, normalize: bool = True,
+            taxonomy: pd.DataFrame = None, repseqs: DNAFASTAFormat = None):
+    ca.set_log_level('INFO')
+    print('creating experiment')
     metadata = metadata.to_dataframe()
     samples = table.ids(axis='sample')
     features = table.ids(axis='observation')
+    # combine the taxonomy
+    feature_metadata = pd.DataFrame(index=features, columns={'_feature_id': features})
+    if taxonomy is not None:
+        print('adding taxonomy')
+        feature_metadata['taxonomy'] = taxonomy['Taxon']
+    else:
+        feature_metadata['taxonomy'] = 'NA'
+    # use repseqs if supplied
+    if repseqs is not None:
+        print('converting hashes to sequences using repseqs file')
+        feature_metadata = _seqs_from_repseqs(feature_metadata, repseqs)
+
     metadata = metadata.filter(items=samples, axis='index')
-    feature_metadata = pd.DataFrame(index=features, columns={'_feature_id': features, 'taxonomy': 'NA'})
     exp = ca.AmpliconExperiment(data=table.transpose().matrix_data, sample_metadata=metadata, feature_metadata=feature_metadata, sparse=False)
+    print('created experiment %r' % exp)
+    if normalize:
+        print('normalizing to 10000 reads/sample')
+        exp = exp.normalize(10000)
+    if min_abundance > 0:
+        print('removing sequences with sum abundance < %f' % min_abundance)
+        exp = exp.filter_sum_abundance(min_abundance)
+        print('remaining experiment %r' % exp)
     if sort_field is not None:
-        exp = exp.sort(sort_field)
+        print('sorting by field %s' % sort_field)
+        exp = exp.sort_samples(sort_field)
     if cluster:
+        print('clustering sequences')
         exp = exp.cluster_features(10)
-    exp.export_html(output_file=os.path.join(output_dir, 'index.html'))
-    # exp.export_html(output_file=os.path.join(output_dir, 'index.html'))
-
-
-_source_types = ['dsfdr', 'aldex2', 'dacomp', 'songbird']
+    print('generating heatmap to output file %s' % output_dir)
+    exp.export_html(output_file=os.path.join(output_dir, 'index.html'), sample_field=sort_field, feature_field='taxonomy')
 
 
 plugin.methods.register_function(
     function=enrichment,
-    inputs={'data': FeatureData[Differential],
+    inputs={'diff': FeatureData[Differential],
             'repseqs': FeatureData[Sequence],
             },
     outputs=[('enriched', FeatureData[Differential])],
     parameters={
-        'source': Str % Choices(_source_types),
+        'source': Str % Choices(['dsfdr', 'aldex2', 'dacomp', 'songbird', 'ancom', 'tsv']),
         'method': Str % Choices('groups', 'correlation'),
         'sig_threshold': Float,
+        'diff_tsv': Str,
+        'ancom_stat': Str,
     },
     input_descriptions={
-        'data': ('The feature table containing the samples over which beta '
-                 'diversity should be computed.')
+        'diff': 'Result of qiime2 differential abundance plugin (using dsfdr/aldex2/dacomp/songbird). Should be .qza. If using ancom/generic tsv, use --p-diff_tsv parameter instead.',
+    },
+    parameter_descriptions={
+        'source': 'Origin of the differentail abundance',
+        'method': '"groups" to compare term enrichemnent between significantly enriched sequences in both directions, "correlation" to detect dbbact terms significanly correlated/anti-correlated with the effect size.',
+        'diff_tsv': ('A tsv table input file (e.g. from ancom when using --p-source ancom, or general tsv when using --p-source tsv).'
+                     ' Use instead of --i-diff. When using tsv, file should contain the columns:"id" (sequence), "effect", "pval", "reject".'),
+        'ancom_stat': 'the ancom statitical results output file for significant sequence identification (optional - overrides sig-threshold)',
     },
     output_descriptions={'enriched': 'the enriched features'},
     name='enrichemnt',
@@ -270,12 +360,16 @@ plugin.visualizers.register_function(
             'repseqs': FeatureData[Sequence],
             },
     parameters={
-        'prev_thresh': Float
+        'prev_thresh': Float,
+        'focus_terms': Str,
     },
     input_descriptions={
         'data': 'The biom table to draw the wordcloud for.'
     },
-    parameter_descriptions={},
+    parameter_descriptions={
+        'prev_thresh': 'Mininal prevalence (fraction of samples sequence is present) in order to include sequence in wordcloud stats.',
+        'focus_terms': 'show only terms from annotations containing all these terms (comma separated).'
+    },
     name='wordcloud',
     description=('draw wordcloud')
 )
@@ -297,14 +391,26 @@ plugin.visualizers.register_function(
 
 plugin.visualizers.register_function(
     function=heatmap,
-    inputs={'table': FeatureTable[Frequency]},
+    inputs={'table': FeatureTable[Frequency],
+            'repseqs': FeatureData[Sequence],
+            'taxonomy': FeatureData[Taxonomy],
+            },
     parameters={'metadata': Metadata,
                 'sort_field': Str,
-                'cluster': Bool},
+                'cluster': Bool,
+                'normalize': Bool,
+                'min_abundance': Float,
+                },
     input_descriptions={
         'table': 'The table to plot'
     },
-    parameter_descriptions={},
+    parameter_descriptions={
+        'metadata': 'The metadata table (tsv)',
+        'sort_field': 'field to sort the samples by before plotting',
+        'cluster': 'if true, cluster (reorder) the sequences before plotting (based on similar behavior across samples',
+        'normalize': 'it true, normalize (TSS) the number of reads per sample',
+        'min_abundance': 'filter away seqiuences with < min_abundance total reads (over all samples)',
+    },
     name='heat',
     description=('Plot interactive heatmap')
 )
