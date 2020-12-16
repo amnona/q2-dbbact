@@ -1,3 +1,9 @@
+## v0.3.0 (2020-12-16)
+
+### Feat
+
+- Add import for new diff. abundance formats
+
 ## v0.2.0 (2020-12-06)
 
 ### Feat
