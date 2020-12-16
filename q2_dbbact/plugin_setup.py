@@ -106,6 +106,7 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
     if diff is not None and diff_tsv is not None:
         raise ValueError('Need to supply either --i-diff or --p-diff-tsv differential results input file (both were supplied)')
 
+    # get the differential abundance dataframe. index is sequence
     if diff is not None:
         data = diff
     else:
@@ -116,6 +117,7 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
             print('failed to read diff_tsv file %s. Is is a valid tsv differential abundance file?' % diff_tsv)
             raise e
 
+    # if needed, replace q2 hashes with sequences from the rep-seqs file
     if repseqs is not None:
         data = _seqs_from_repseqs(data=data, repseqs=repseqs)
 
@@ -127,6 +129,8 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
         print('Features seem to be hashes. First id=%s' % data.iloc[0].name)
         raise ValueError('Input file contains sequence hashes instead of actual sequences.\nPlease use qiime dbbact enrichment-hash and supply the rep_seqs.qza.')
 
+    # preprocess the dataframe to capture the correct per-feature differential abundance fields
+    # these will be translated into "effect" (effect size),"pval" (p-value for differential abundance), "dir" (higher in which group) and "reject" (reject the null hypothesis of similar distribution in both groups)
     ndata['_feature_id'] = ndata.index.values
     if source == 'dsfdr':
         ndata = pd.DataFrame(data={'dir': data['Statistic'] > 0,
@@ -147,14 +151,12 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
         field_name = vals[0]
         # we don't have p-values so do not reject any
         ndata = pd.DataFrame(data={'effect': ndata[vals[0]], 'reject': 1}, index=ndata.index)
-
     elif source == 'aldex2':
         ndata = pd.DataFrame(data={'dir': data['effect'] > 0,
                                    'pval': data['we.eBH'],
                                    'effect': data['effect'],
                                    'reject': data['we.eBH'] < sig_threshold}, index=ndata.index)
         ndata = ndata[ndata['reject'] == 1]
-
     elif source == 'ancom':
         # if user supplied the ancom stats file, use it to get significant (null hypothesis rejects)
         # otherwise, use the sig_threshold for the W stat
@@ -170,7 +172,6 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
             except Exception as e:
                 print('failed to read ancom-stat file %s. Is is a valid tsv differential abundance file?' % ancom_stat)
                 raise e
-
     elif source == 'tsv':
         if 'pval' not in data.columns:
             raise ValueError('input tsv file does not contain "pval" column')
@@ -182,15 +183,16 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
                                    'effect': data['effect'],
                                    'pval': data['pval'],
                                    'reject': data['reject']}, index=ndata['id'])
-
     else:
         raise ValueError('Unsupported source %s' % source)
 
-    exp = ca.AmpliconExperiment(data=np.zeros([1, len(ndata)]),
+    # create a new calour experiment using sequences as features and 1 sample (we don't use the sample)
+    exp = ca.AmpliconExperiment(data=np.ones([1, len(ndata)]),
                                 sample_metadata=pd.DataFrame({'_sample_id': ['s1']}),
                                 feature_metadata=ndata,
                                 sparse=False)
 
+    # do the dbbact term enrichment test (using 2 feature groups or feature effect size rank correlation)
     if method == 'groups':
         print('%d features' % len(exp.feature_metadata))
         exp = exp.filter_by_metadata('reject', ['1'], axis='f')
