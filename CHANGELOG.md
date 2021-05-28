@@ -1,3 +1,9 @@
+## v0.4.0 (2021-05-29)
+
+### Feat
+
+- add lots of new methods and visualizations
+
 ## v0.3.0 (2020-12-16)
 
 ### Feat
