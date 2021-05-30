@@ -1,3 +1,10 @@
+## v0.5.0 (2021-05-30)
+
+### Feat
+
+- enrich-pipeline now works
+- unit testing and working on pipeline
+
 ## v0.4.0 (2021-05-29)
 
 ### Feat
