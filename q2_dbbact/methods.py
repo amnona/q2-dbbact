@@ -259,15 +259,16 @@ def enrich_pipeline(ctx,
     res = []
     print('generating initial wordcloud')
     wordcloud_func = ctx.get_action('dbbact', 'draw_wordcloud_vis')
-    wordcloud = wordcloud_func(data=table, repseqs=repseqs)
+    wordcloud, = wordcloud_func(data=table, repseqs=repseqs)
     res.append(wordcloud)
 
     print('detecting differetially abundant features')
     diff_func = ctx.get_action('dbbact', 'diff_abundance')
-    diff_table = diff_func(table=table, metadata=metadata, field=field, pair_field=pair_field, repseqs=repseqs, statistical_test=statistical_test,
-                           transform_function=transform_function, alpha=sig_threshold, permutations=permutations, random_seed=random_seed, fdr_method=fdr_method,
-                           val1=val1, val2=val2)
-    if len(diff_table) == 0:
+    diff_table, = diff_func(table=table, metadata=metadata, field=field, pair_field=pair_field, repseqs=repseqs, statistical_test=statistical_test,
+                            transform_function=transform_function, alpha=sig_threshold, permutations=permutations, random_seed=random_seed, fdr_method=fdr_method,
+                            val1=val1, val2=val2)
+    diff_table_df = diff_table.view(pd.DataFrame)
+    if len(diff_table_df) == 0:
         raise ValueError('No significant ASVs found to differentiate between %s and %s in field %s' % (val1, val2, field))
     res.append(diff_table)
 
@@ -278,16 +279,18 @@ def enrich_pipeline(ctx,
 
     print('detecting enriched dbBact terms')
     enrich_func = ctx.get_action('dbbact', 'enrichment')
-    print(type(diff_table))
-    enriched = enrich_func(diff=diff_table, source='dsfdr', method=method, sig_threshold=sig_threshold, attack=attack, maxid=maxid, random_seed=random_seed)
-    print('found %d enriched dbbact terms' % len(enriched))
+    enriched, = enrich_func(diff=diff_table, source='dsfdr', method=method, sig_threshold=sig_threshold, attack=attack, maxid=maxid, random_seed=random_seed)
+    enriched_df = enriched.view(pd.DataFrame)
+    print('found %d enriched dbbact terms' % len(enriched_df))
     res.append(enriched)
 
     print('creating enriched terms barplot')
     # create the lables for the 2 groups
     metadata_df = metadata.to_dataframe()
-    label1 = ",".join(val1)
-    label2 = ",".join(val2)
+    if val1 is not None:
+        label1 = ",".join(val1)
+    if val2 is not None:
+        label2 = ",".join(val2)
     if val1 is None and val2 is None:
         uvals = metadata_df[field].unique()
         label1 = uvals[0]
@@ -296,7 +299,8 @@ def enrich_pipeline(ctx,
         label2 = 'NOT ' + label1
 
     terms_barplot_func = ctx.get_action('dbbact', 'plot_enrichment')
-    enriched_barplot = terms_barplot_func(enriched=enriched, labels=[label1, label2])
+    enriched_barplot, = terms_barplot_func(enriched=enriched, labels=[label1, label2])
     res.append(enriched_barplot)
 
-    return res
+    print('done')
+    return tuple(res)
