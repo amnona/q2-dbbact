@@ -8,6 +8,7 @@ import dbbact_calour.dbbact
 from typing import List
 
 from .utils import _iter_fasta, _seqs_from_repseqs, _load_diff_abundance
+from .visualizations import venn, heatmap, plot_enrichment, draw_wordcloud_vis
 
 
 def embed_seqs(table: biom.Table, repseqs: DNAFASTAFormat) -> biom.Table:
@@ -159,13 +160,17 @@ def diff_abundance(table: biom.Table,
                    transform_function: str = 'rankdata',
                    alpha: float = 0.1,
                    permutations: int = 1000,
-                   random_seed: int = 2020,
+                   random_seed: int = 0,
                    fdr_method: str = 'dsfdr',
                    val1: List[str] = None,
                    val2: List[str] = None) -> pd.DataFrame:
 
     # allow debug info. q2 takes care of what to show using the --verbose flag
     ca.set_log_level('INFO')
+
+    # set random seed to None (i.e. random every time) if 0 is provided
+    if random_seed == 0:
+        random_seed = None
 
     metadata = metadata.to_dataframe()
 
@@ -230,4 +235,68 @@ def diff_abundance(table: biom.Table,
                        index=dd.feature_metadata.index)
     res['dir'] = res['dir'].astype(int)
     res.index.rename('featureid', inplace=True)
+    return res
+
+
+def enrich_pipeline(ctx,
+                    table,
+                    # output_dir: str,
+                    metadata,
+                    field,
+                    pair_field=None,
+                    repseqs=None,
+                    statistical_test='meandiff',
+                    transform_function='rankdata',
+                    permutations=1000,
+                    fdr_method='dsfdr',
+                    val1=None,
+                    val2=None,
+                    method='groups',
+                    sig_threshold=0.1,
+                    attack=False,
+                    maxid=None,
+                    random_seed=0):
+    res = []
+    print('generating initial wordcloud')
+    wordcloud_func = ctx.get_action('dbbact', 'draw_wordcloud_vis')
+    wordcloud = wordcloud_func(data=table, repseqs=repseqs)
+    res.append(wordcloud)
+
+    print('detecting differetially abundant features')
+    diff_func = ctx.get_action('dbbact', 'diff_abundance')
+    diff_table = diff_func(table=table, metadata=metadata, field=field, pair_field=pair_field, repseqs=repseqs, statistical_test=statistical_test,
+                           transform_function=transform_function, alpha=sig_threshold, permutations=permutations, random_seed=random_seed, fdr_method=fdr_method,
+                           val1=val1, val2=val2)
+    if len(diff_table) == 0:
+        raise ValueError('No significant ASVs found to differentiate between %s and %s in field %s' % (val1, val2, field))
+    res.append(diff_table)
+
+    # print('creating diff ASV heatmap')
+    # heatmap_func = ctx.get_action('dbbact', 'heatmap')
+    # diff_heatmap = heatmap_func(table=diff_table, metadata=metadata, sort_field=field, cluster=False, repseqs=repseqs)
+    # res.append(diff_heatmap)
+
+    print('detecting enriched dbBact terms')
+    enrich_func = ctx.get_action('dbbact', 'enrichment')
+    print(type(diff_table))
+    enriched = enrich_func(diff=diff_table, source='dsfdr', method=method, sig_threshold=sig_threshold, attack=attack, maxid=maxid, random_seed=random_seed)
+    print('found %d enriched dbbact terms' % len(enriched))
+    res.append(enriched)
+
+    print('creating enriched terms barplot')
+    # create the lables for the 2 groups
+    metadata_df = metadata.to_dataframe()
+    label1 = ",".join(val1)
+    label2 = ",".join(val2)
+    if val1 is None and val2 is None:
+        uvals = metadata_df[field].unique()
+        label1 = uvals[0]
+        label2 = uvals[1]
+    elif val2 is None:
+        label2 = 'NOT ' + label1
+
+    terms_barplot_func = ctx.get_action('dbbact', 'plot_enrichment')
+    enriched_barplot = terms_barplot_func(enriched=enriched, labels=[label1, label2])
+    res.append(enriched_barplot)
+
     return res

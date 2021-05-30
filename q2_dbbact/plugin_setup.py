@@ -1,18 +1,25 @@
 import qiime2.plugin
 from qiime2.plugin import (SemanticType, Str, Int, Float, Choices, List,
-                           MetadataColumn, Categorical, Numeric, Metadata, Bool)
+                           MetadataColumn, Categorical, Numeric, Metadata, Bool, Visualization)
 from q2_types.feature_table import (
     FeatureTable, Frequency)
 from q2_types.feature_data import (FeatureData, Differential, Sequence, Taxonomy, )
 
 from . import __version__
-from .methods import single_enrichment, enrichment, embed_seqs, bg_term_enrichment, diff_abundance
+from .methods import single_enrichment, enrichment, embed_seqs, bg_term_enrichment, diff_abundance, enrich_pipeline
 from .visualizations import draw_wordcloud_vis, plot_enrichment, heatmap, venn
 
 
 _citation = ('manuscript in preparation')
 
 _short_description = "A Qiime2 plugin for the dbBact bacterial knowledge-base (dbbact.org)"
+
+
+# options for the diff_abundance plugin
+_statistical_tests = ['meandiff', 'stdmeandiff']
+_transform_functions = ['rankdata', 'log2data', 'normdata', 'binarydata', 'none']
+_fdr_method = ['dsfdr', 'bhfdr', 'byfdr', 'filterBH']
+
 
 plugin = qiime2.plugin.Plugin(
     name='dbbact',
@@ -22,6 +29,79 @@ plugin = qiime2.plugin.Plugin(
     short_description='dbBact plugin for Qiime2',
     description=('A Qiime2 plugin for the dbBact bacterial knowledge-base (dbbact.org)'),
     citation_text=_citation
+)
+
+
+plugin.pipelines.register_function(
+    function=enrich_pipeline,
+    inputs={'repseqs': FeatureData[Sequence],
+            'table': FeatureTable[Frequency]},
+    # outputs=[('all_wordcloud', Visualization),
+    #          ('diff_ASVs_table', FeatureData[Differential]),
+    #          ('diff_ASVs_heatmap', Visualization),
+    #          ('enriched_terms_table', FeatureData[Differential]),
+    #          ('enriched_terms_barplot', Visualization),
+    #          ('enriched_terms_heatmap', Visualization),
+    #          ('enriched_term_venn', Visualization)],
+    outputs=[
+        ('all_wordcloud', Visualization),
+        ('diff_asv_table', FeatureData[Differential]),
+        # ('diff_asv_heatmap', Visualization),
+        ('enriched_terms_table', FeatureData[Differential]),
+        ('enriched_terms_barplot', Visualization),
+        # ('enriched_terms_heatmap', Visualization),
+        # ('enriched_term_venn', Visualization),
+    ],
+    parameters={
+        'metadata': Metadata,
+        'method': Str % Choices('groups', 'correlation'),
+        'field': Str,
+        'val1': List[Str],
+        'val2': List[Str],
+        'pair_field': Str,
+        'random_seed': Int,
+        'sig_threshold': Float,
+        'maxid': Int,
+        'statistical_test': Str % Choices(_statistical_tests),
+        'transform_function': Str % Choices(_transform_functions),
+        'permutations': Int,
+        'fdr_method': Str % Choices(_fdr_method),
+        'attack': Bool,
+    },
+    input_descriptions={
+        'table': 'The feature table to perform differential abundance on (needs to be normalized or rarified)',
+        'repseqs': 'The corresponding representative sequences (if not embedded in the table using the --p-no-hashed-feature-ids parameter when denoising)'
+    },
+    parameter_descriptions={
+        'metadata': 'Metadata (mapping) file for the table',
+        'field': 'The metadata field on which to perform the differential abundance test',
+        'pair_field': 'If supplied, perform paired differential abundance testing pairing samples in the pair_field metadata field',
+        'val1': 'Metadata values (in field) for samples in group1. Can supply multiple values',
+        'val2': 'Metadata values (in field) for samples in group2. Can supply multiple values. If not provided, take all samples not in group1',
+        'statistical_test': 'The statistic used for the effect size calculation. "meandiff" is the difference in the means between the two groups, '
+                            '"stdmeandiff" is the difference in the means normalized by the standard deviation.',
+        'transform_function': 'The transformation to apply to the frequency data (for each feature) before calculating the effect size. options: '
+                              '"rankdata": rank each feature across samples, '
+                              '"log2data": log2 transform each frequency, '
+                              '"normdata": normalize to constant sum for each feature, '
+                              '"binarydata": convert to present/absent, '
+                              '"none": do not apply any transformation',
+        'permutations': 'Number of permutations to calculate (higher number is more exact but slower)',
+        'random_seed': 'The random seed to use (for fully reproducible results, since test is permutation based)',
+        'fdr_method': 'The multiple hypothesis correction method to use. options: '
+                      '"dsfdr": The discrete FDR correction (stronger than BHfdr if there are many low prevalence features) (Jiang et al 2017, https://doi.org/10.1128/mSystems.00092-17), '
+                      '"bhfdr": Benhaminy-Hochberg FDR correction, '
+                      '"byfdr": Benhaminy-Yekutieli FDR correction, '
+                      '"filterBH": Low frequency filtering based correction (see Jiang et al 2017, https://doi.org/10.1128/mSystems.00092-17).',
+        'method': '"groups" to compare term enrichemnent between significantly enriched sequences in both directions, "correlation" to detect dbbact terms significanly correlated/anti-correlated with the effect size.',
+        'maxid': 'The maximal dbBact annotation id to use (to enable replication of results after new annotations are added to dbBact',
+        'attack': 'Attack mode',
+    },
+    output_descriptions={'all_wordcloud': 'Wordcloud of all the features in the input table',
+                         'diff_asv_table': 'Table of the differentially abundant ASVs between to the groups acoording to metadata field',
+                         },
+    name='dbBact term enrichment for differential abundance results',
+    description=("Identify dbBact terms enriched in results of differential abundance (terms significantly more represented in either of the differential abundance groups or correlated with effect size)")
 )
 
 
@@ -123,11 +203,6 @@ plugin.methods.register_function(
     description=('Test dbBact term enrichment in a test set of sequences compared to all dbBact sequences associated (COMMON) with a set of terms')
 )
 
-
-# options for the diff_abundance plugin
-_statistical_tests = ['meandiff', 'stdmeandiff']
-_transform_functions = ['rankdata', 'log2data', 'normdata', 'binarydata', 'none']
-_fdr_method = ['dsfdr', 'bhfdr', 'byfdr', 'filterBH']
 
 plugin.methods.register_function(
     function=diff_abundance,
