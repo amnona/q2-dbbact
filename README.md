@@ -1,6 +1,10 @@
 # q2-dbbact
 A [Qiime2](https://qiime2.org/) plugin for [dbBact](http://dbbact.org)
 
+![wordcloud](https://github.com/amnona/q2-dbbact/blob/main/pics/cfs-wordcloud.jpg)
+![enriched barplot](https://github.com/amnona/q2-dbbact/blob/main/pics/enriched_terms.jpg)
+![enriched terms](https://github.com/amnona/q2-dbbact/blob/main/pics/terms-table.jpg)
+
 # Features:
 * Differential abundance testing using [Calour](https://github.com/biocore/calour) rank-mean differential abundance test (with dsFDR correction).
 * dbBact term enrichment from differntial abundance results of qiime2 (i.e. songbird/q2-aldex2/ancom/dacomp or the built in rank-mean test).
