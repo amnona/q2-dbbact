@@ -37,6 +37,7 @@ Our input is a feature table and a metadata file with a given column dividing ou
 The wordcloud is created for all the bacteria in the feature table.
 
 The output wordcloud words are dbBact terms associated with the bacteria. The word size corresponds to the F-score (recall and precision) of the term. Blue terms are positively associated (i.e. appear in COMMON/DOMINANT/HIGHER IN annotations) where as red terms (preceeded by a "-") are negatively associated (i.e. appear in LOWER IN annotations).
+```qiime dbbact draw-wordcloud-vis --i-data cfs-table.qza --i-repseqs cfs-rep-seqs.qza --o-visualization wordcloud-cfs```
 
 ![wordcloud](https://github.com/amnona/q2-dbbact/blob/main/pics/cfs-wordcloud.jpg)
 
