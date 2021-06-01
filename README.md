@@ -4,9 +4,6 @@ A [Qiime2](https://qiime2.org/) plugin for [dbBact](http://dbbact.org)
 ![wordcloud](https://github.com/amnona/q2-dbbact/blob/main/pics/cfs-wordcloud.jpg)
 ![enriched barplot](https://github.com/amnona/q2-dbbact/blob/main/pics/enriched_terms.jpg)
 ![heatmap](https://github.com/amnona/q2-dbbact/blob/main/pics/heatmap.jpg)
-<!-- ![wordcloud terms](https://github.com/amnona/q2-dbbact/blob/main/pics/terms-table.jpg)
-![enriched terms](https://github.com/amnona/q2-dbbact/blob/main/pics/enriched_terms-cfs.jpg)
-  -->
  
 # Features:
 * Differential abundance testing using [Calour](https://github.com/biocore/calour) rank-mean differential abundance test (with [dsFDR](https://escholarship.org/content/qt3j68q5n7/qt3j68q5n7_noSplash_e7ad1cf405f67b9cef0e5a99c1804fd5.pdf) correction).
