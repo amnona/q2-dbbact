@@ -1,3 +1,9 @@
+## v1.0.3 (2021-06-01)
+
+### Fix
+
+- add pypi markdown support for readme
+
 ## v1.0.2 (2021-06-01)
 
 ### Fix
