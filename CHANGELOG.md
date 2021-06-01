@@ -1,3 +1,9 @@
+## v1.0.2 (2021-06-01)
+
+### Fix
+
+- fix the readme to work on pypi
+
 ## v1.0.1 (2021-06-01)
 
 ### Fix
