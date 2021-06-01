@@ -1,3 +1,9 @@
+## v1.0.0 (2021-06-01)
+
+### Feat
+
+- add save pdf to venn diagram
+
 ## v0.5.0 (2021-05-30)
 
 ### Feat
