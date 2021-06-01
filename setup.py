@@ -9,7 +9,7 @@ import ast
 # https://github.com/mitsuhiko/flask/blob/master/setup.py
 _version_re = re.compile(r'__version__\s+=\s+(.*)')
 
-with open('dbbact_calour/__init__.py', 'rb') as f:
+with open('q2_dbbact/__init__.py', 'rb') as f:
     hit = _version_re.search(f.read().decode('utf-8')).group(1)
     version = str(ast.literal_eval(hit))
 
@@ -31,7 +31,7 @@ classifiers = [
     'Operating System :: Microsoft :: Windows']
 
 
-description = 'A qiime2 (https://qiime2.org/) plugin for dbbact (http://dbbact.org) annotations of microbiome experiments'
+description = 'A qiime2 (https://qiime2.org/) plugin for dbBact (http://dbbact.org) annotations of microbiome experiments'
 
 with open('README.md') as f:
     long_description = f.read()
