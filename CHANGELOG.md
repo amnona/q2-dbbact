@@ -1,3 +1,9 @@
+## v1.0.1 (2021-06-01)
+
+### Fix
+
+- correct the package init file in setup.py
+
 ## v1.0.0 (2021-06-01)
 
 ### Feat
