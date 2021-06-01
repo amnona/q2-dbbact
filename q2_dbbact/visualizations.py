@@ -119,8 +119,10 @@ def venn(output_dir: str, terms: List[str], diff: pd.DataFrame = None, repseqs: 
     exp.feature_metadata['_calour_direction'] = exp.feature_metadata['dir'].replace({0: label1, 1: label2}, inplace=False)
     f = db.plot_term_venn_all(terms, exp, max_size=max_size, set_colors=set_colors)
     f.savefig(os.path.join(output_dir, 'venn.svg'))
+    f.savefig(os.path.join(output_dir, 'venn.pdf'))
     with open(os.path.join(output_dir, 'index.html'), 'w') as fl:
         fl.write('<html><body>\n')
         fl.write('<h1>dbBact venn for terms %s</h1>\n' % ','.join(terms))
         fl.write('<img src="venn.svg" alt="term venn diagram"><br><br>\n')
+        fl.write('<a href="venn.pdf">Download as PDF</a><br>\n')
         fl.write('</body></html>')
