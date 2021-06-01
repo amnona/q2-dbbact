@@ -44,6 +44,7 @@ setup(
     packages=find_packages(),
     license='BSD',
     long_description=long_description,
+    long_description_content_type="text/markdown",
     keywords=keywords,
     classifiers=classifiers,
     author="dbBact team",
