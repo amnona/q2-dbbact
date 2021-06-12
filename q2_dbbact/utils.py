@@ -47,6 +47,14 @@ def _iter_fasta(fp):
 
 def _seqs_from_repseqs(data: pd.DataFrame, repseqs: DNAFASTAFormat):
     '''add sequences from repseqs to the data
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    data: pandas.DataFrame
+        with the updated index containing sequences instead of hashes
     '''
     # check if feature ids are hashes by looking at first feature
     if len(data.iloc[0].name) == 32:

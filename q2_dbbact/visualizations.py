@@ -11,15 +11,15 @@ from typing import List
 from .utils import _seqs_from_repseqs, _load_diff_abundance, _test_exact_region
 
 
-def draw_wordcloud_vis(output_dir: str, data: biom.Table, repseqs: DNAFASTAFormat = None, prev_thresh: float = 0.3, focus_terms: List[str] = None):
+def draw_wordcloud_vis(output_dir: str, table: biom.Table, repseqs: DNAFASTAFormat = None, prev_thresh: float = 0.3, focus_terms: List[str] = None):
     '''draw the wordcloud for features in the biom table and save outputs'''
     db = dbbact_calour.dbbact.DBBact()
     db.set_log_level('INFO')
 
-    df = data.to_dataframe()
+    df = table.to_dataframe()
 
     if repseqs is not None:
-        data = _seqs_from_repseqs(data=df, repseqs=repseqs)
+        df = _seqs_from_repseqs(data=df, repseqs=repseqs)
 
     if len(df.iloc[0].name) == 32:
         raise ValueError('input table seems to contain hashes and not sequences. Please supply the rep-seqs.qza file.')

@@ -68,17 +68,17 @@ class Test_DBBact(unittest.TestCase):
 		self.assertEqual(res.index.values[0], 'small village')
 		self.assertEqual(res.index.values[-1], '-physical activity')
 
-		# to generate ancom results:
-		# QIIME 2 Plugin 'composition' version 2020.6.0 (from package 'q2-composition' version 2020.6.0)
-		# qiime composition add-pseudocount --i-table cfs-merged.qza --o-composition-table cfs-pseudocount.qza
-		# qiime composition ancom --i-table cfs-pseudocount.qza --m-metadata-file map.cfs.txt --m-metadata-column Subject --output-dir diff-cfs-ancom --o-visualization diff-cfs-ancom.qzv
-		# then need to save the ancom statistical results tsv from the ancom output qzv (named ancom.tsv)
-		res = enrichment(diff_tsv=join(self.test_data_dir, 'diff-cfs-ancom-export.tsv'), source='ancom', maxid=6279, random_seed=2021)
-		print(len(res))
-		print(np.sum(res['odif'] > 0))
-		print(res.iloc[0]['odif'])
-		print(res.index.values[0])
-		self.assertEqual(len(res), 365)
-		self.assertEqual(np.sum(res['odif'] > 0), 101)
-		self.assertEqual(res.index.values[0], 'small village')
-		self.assertEqual(res.index.values[-1], '-physical activity')
+		# # to generate ancom results:
+		# # QIIME 2 Plugin 'composition' version 2020.6.0 (from package 'q2-composition' version 2020.6.0)
+		# # qiime composition add-pseudocount --i-table cfs-merged.qza --o-composition-table cfs-pseudocount.qza
+		# # qiime composition ancom --i-table cfs-pseudocount.qza --m-metadata-file map.cfs.txt --m-metadata-column Subject --output-dir diff-cfs-ancom --o-visualization diff-cfs-ancom.qzv
+		# # then need to save the ancom statistical results tsv from the ancom output qzv (named ancom.tsv)
+		# res = enrichment(diff_tsv=join(self.test_data_dir, 'diff-cfs-ancom-export.tsv'), source='ancom', maxid=6279, random_seed=2021)
+		# print(len(res))
+		# print(np.sum(res['odif'] > 0))
+		# print(res.iloc[0]['odif'])
+		# print(res.index.values[0])
+		# self.assertEqual(len(res), 365)
+		# self.assertEqual(np.sum(res['odif'] > 0), 101)
+		# self.assertEqual(res.index.values[0], 'small village')
+		# self.assertEqual(res.index.values[-1], '-physical activity')

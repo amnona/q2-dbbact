@@ -290,7 +290,7 @@ def enrich_pipeline(ctx,
 
     print('generating initial wordcloud')
     wordcloud_func = ctx.get_action('dbbact', 'draw_wordcloud_vis')
-    wordcloud, = wordcloud_func(data=table, repseqs=repseqs)
+    wordcloud, = wordcloud_func(table=table, repseqs=repseqs)
     res.append(wordcloud)
 
     print('detecting differetially abundant features')

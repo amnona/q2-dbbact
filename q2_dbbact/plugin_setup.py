@@ -277,7 +277,7 @@ plugin.methods.register_function(
 
 plugin.visualizers.register_function(
     function=draw_wordcloud_vis,
-    inputs={'data': FeatureTable[Frequency],
+    inputs={'table': FeatureTable[Frequency],
             'repseqs': FeatureData[Sequence],
             },
     parameters={
@@ -285,7 +285,7 @@ plugin.visualizers.register_function(
         'focus_terms': List[Str],
     },
     input_descriptions={
-        'data': 'The biom table to draw the wordcloud for.'
+        'table': 'The biom table to draw the wordcloud for.'
     },
     parameter_descriptions={
         'prev_thresh': 'Mininal prevalence (fraction of samples sequence is present) in order to include sequence in wordcloud stats.',
