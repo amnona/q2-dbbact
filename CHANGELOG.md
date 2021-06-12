@@ -1,3 +1,9 @@
+## v1.1.0 (2021-06-12)
+
+### Feat
+
+- add trim-primers and primer testing in all methods/visualizations
+
 ## v1.0.3 (2021-06-01)
 
 ### Fix
