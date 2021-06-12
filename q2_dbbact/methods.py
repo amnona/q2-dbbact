@@ -7,7 +7,7 @@ import dbbact_calour
 import dbbact_calour.dbbact
 from typing import List
 
-from .utils import _iter_fasta, _seqs_from_repseqs, _load_diff_abundance
+from .utils import _iter_fasta, _seqs_from_repseqs, _load_diff_abundance, _test_exact_region, _test_embedded_primers, _trim_known_primer
 from .visualizations import venn, heatmap, plot_enrichment, draw_wordcloud_vis
 
 
@@ -29,6 +29,14 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
     # load the differetial abundance table into a calour experiment
     exp = _load_diff_abundance(diff=diff, diff_tsv=diff_tsv, source=source, ancom_stat=ancom_stat, repseqs=repseqs, sig_threshold=sig_threshold)
     ndata = exp.feature_metadata
+
+    # check if the experiment contains trimmed sequences. otherwise let the user know
+    seqs = ndata.sample(n=np.min([500, len(ndata)])).index.values
+    region = _test_exact_region(seqs)
+    if region is None:
+        raise ValueError('Table seems to contain untrimmed sequences. Please run qiime dbbact trim-primers on the table prior to running enrichment.')
+    else:
+        print('Identified region %s' % region)
 
     # do the dbbact term enrichment test (using 2 feature groups or feature effect size rank correlation)
     if method == 'groups':
@@ -100,6 +108,14 @@ def single_enrichment(bg_table: biom.Table = None, test_table: biom.Table = None
                                 feature_metadata=pd.DataFrame({'_feature_id': all_features}, index=all_features),
                                 sparse=False)
 
+    # check if the experiment contains trimmed sequences. otherwise let the user know
+    seqs = exp.feature_metadata.sample(n=np.min([500, len(exp.feature_metadata)])).index.values
+    region = _test_exact_region(seqs)
+    if region is None:
+        raise ValueError('Table seems to contain untrimmed sequences. Please run qiime dbbact trim-primers on the table prior to running enrichment.')
+    else:
+        print('Identified region %s' % region)
+
     res = db.enrichment(exp=exp, features=seqs, method='card_mean')
     term_table = res[0]
     if len(term_table) == 0:
@@ -139,6 +155,15 @@ def bg_term_enrichment(bg_terms: List[str], test_table: biom.Table = None, test_
                                 sample_metadata=pd.DataFrame({'_sample_id': ['s1']}),
                                 feature_metadata=pd.DataFrame({'_feature_id': seqs}, index=seqs),
                                 sparse=False)
+
+    # check if the experiment contains trimmed sequences. otherwise let the user know
+    seqs = exp.feature_metadata.sample(n=np.min([500, len(exp.feature_metadata)])).index.values
+    region = _test_exact_region(seqs)
+    if region is None:
+        raise ValueError('Table seems to contain untrimmed sequences. Please run qiime dbbact trim-primers on the table prior to running enrichment.')
+    else:
+        print('Identified region %s' % region)
+
     exp = exp.normalize()
 
     # do the background enrichment analysis
@@ -257,6 +282,12 @@ def enrich_pipeline(ctx,
                     maxid=None,
                     random_seed=0):
     res = []
+
+    print('trimming primers if needed')
+    trim_func = ctx.get_action('dbbact', 'trim_primers')
+    table, = trim_func(table=table, repseqs=repseqs)
+    res.append(table)
+
     print('generating initial wordcloud')
     wordcloud_func = ctx.get_action('dbbact', 'draw_wordcloud_vis')
     wordcloud, = wordcloud_func(data=table, repseqs=repseqs)
@@ -304,3 +335,56 @@ def enrich_pipeline(ctx,
 
     print('done')
     return tuple(res)
+
+
+def trim_primers(table: biom.Table, repseqs: DNAFASTAFormat = None) -> biom.Table:
+    print('trim-primers')
+
+    # incorporate the repseqs into the biom table if needed
+    if repseqs is not None:
+        print('converting hashes to sequences using repseqs file')
+        table = embed_seqs(table, repseqs)
+
+    seqs = table.ids(axis='observation')
+
+    # check if table contains hashed sequences and repseqs not supplied
+    if len(seqs[0]) == 32:
+        if repseqs is None:
+            raise ValueError('Table seems to contain hashes and not sequences. Please supply the --i-repseqs representative sequences file, or create the table (deblur/dada2) with the --p-no-hashed-feature-ids flag.')
+
+    # take a random subset of ASVs to examine
+    num_rand = np.min([100, len(seqs)])
+    test_seqs = np.random.choice(seqs, num_rand, replace=False)
+
+    # look if there is an exact match to any dbBact primer region
+    region = _test_exact_region(test_seqs, min_fraction=0.5, ltrim=0)
+    if region is not None:
+        print('Found exact match for region %s. No need for trimming.' % region)
+    else:
+        # no exact match - so maybe primer is embedded?
+        min_primer_len = 10
+        primer, region = _test_embedded_primers(seqs, max_start=25, min_primer_len=min_primer_len, min_fraction=0.25)
+        if region is not None:
+            print('found embedded primer %s for region %s. removing it.' % (primer, region))
+            # let's trim the primers
+            trimmed_seqs_map = _trim_known_primer(seqs, primer, rprimer=None, length=0, remove_ambig=True, keep_primers=False)
+        else:
+            # no primer embedded. So maybe need to trim just first few bases?
+            region = None
+            for cpos in range(min_primer_len):
+                region = _test_exact_region(test_seqs, min_fraction=0.5, ltrim=cpos)
+                if region is not None:
+                    break
+            if region is not None:
+                # found a matching region - lets trim it
+                print('found exact region %s after %d left trmo' % (region, cpos))
+                trimmed_seqs_map = {}
+                for cseq in seqs:
+                    trimmed_seqs_map[cseq] = cseq[cpos:]
+            else:
+                raise ValueError('No matching primers found. Are the reads reverse-complemented?')
+        keep_ids = trimmed_seqs_map.keys()
+        table.filter(keep_ids, axis='observation', inplace=True)
+        table.update_ids(trimmed_seqs_map, axis='observation', strict=False, inplace=True)
+
+    return table

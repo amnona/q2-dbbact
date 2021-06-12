@@ -6,7 +6,7 @@ from q2_types.feature_table import (
 from q2_types.feature_data import (FeatureData, Differential, Sequence, Taxonomy, )
 
 from . import __version__
-from .methods import single_enrichment, enrichment, embed_seqs, bg_term_enrichment, diff_abundance, enrich_pipeline
+from .methods import single_enrichment, enrichment, embed_seqs, bg_term_enrichment, diff_abundance, enrich_pipeline, trim_primers
 from .visualizations import draw_wordcloud_vis, plot_enrichment, heatmap, venn
 
 
@@ -44,6 +44,7 @@ plugin.pipelines.register_function(
     #          ('enriched_terms_heatmap', Visualization),
     #          ('enriched_term_venn', Visualization)],
     outputs=[
+        ('trimmed_table', FeatureTable[Frequency]),
         ('all_wordcloud', Visualization),
         ('diff_asv_table', FeatureData[Differential]),
         # ('diff_asv_heatmap', Visualization),
@@ -153,6 +154,24 @@ plugin.methods.register_function(
     output_descriptions={'merged': 'The biom table with embedded representative sequences'},
     name='embed sequences into hashed biom table',
     description=('embed the representative sequences into the biom table')
+)
+
+
+plugin.methods.register_function(
+    function=trim_primers,
+    inputs={'repseqs': FeatureData[Sequence],
+            'table': FeatureTable[Frequency]},
+    outputs=[('trimmed', FeatureTable[Frequency])],
+    parameters={},
+    input_descriptions={
+        'table': 'The biom table with ASVs to be trimmed',
+        'repseqs': 'The corresponding representative sequences (if not embedded in the table using the --p-no-hashed-feature-ids parameter when denoising)'
+    },
+    output_descriptions={'trimmed': 'The biom table with primer-trimmed sequences'},
+    name='trim primers from table sequences',
+    description=('Make sequences in the biom table compatible with dbBact. The method will automatically identify the dbBact supported primers in the sequences and trim the sequences so '
+                 'all sequences in the biom table start at the end of the supported forward primer. Currently supported dbBact primers are V1 (AGAGTTTGATC[AC]TGG[CT]TCAG), '
+                 'V3 (CCTACGGG[ACGT][CGT]GC[AT][CG]CAG) and V4 (GTGCCAGC[AC]GCCGCGGTAA)')
 )
 
 
