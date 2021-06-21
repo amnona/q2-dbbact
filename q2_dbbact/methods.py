@@ -21,7 +21,7 @@ def embed_seqs(table: biom.Table, repseqs: DNAFASTAFormat) -> biom.Table:
     return table
 
 
-def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_tsv: str = None, source: str = 'dsfdr', method: str = 'groups', sig_threshold: float = 0.1, ancom_stat: str = None, attack: bool = False, maxid: int = None, random_seed: int = None) -> pd.DataFrame:
+def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_tsv: str = None, source: str = 'dsfdr', method: str = 'groups', term_type: str = 'term', sig_threshold: float = 0.1, ancom_stat: str = None, attack: bool = False, maxid: int = None, random_seed: int = None) -> pd.DataFrame:
     ca.set_log_level('INFO')
     db = dbbact_calour.dbbact.DBBact()
     db.set_log_level('INFO')
@@ -44,7 +44,7 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
         exp = exp.filter_by_metadata('reject', ['1'], axis='f')
         print('%d significant ASVs' % len(exp.feature_metadata))
         pos_features = ndata[ndata['effect'] > 0].index.values
-        res = db.enrichment(exp, features=pos_features, max_id=maxid, random_seed=random_seed)
+        res = db.enrichment(exp, features=pos_features, term_type=term_type, max_id=maxid, random_seed=random_seed)
         df = res[0]
     elif method == 'correlation':
         print('searching for dbbact term enrichment for %d ASVs' % len(exp.feature_metadata))
@@ -331,6 +331,17 @@ def enrich_pipeline(ctx,
 
     terms_barplot_func = ctx.get_action('dbbact', 'plot_enrichment')
     enriched_barplot, = terms_barplot_func(enriched=enriched, labels=[label1, label2])
+    res.append(enriched_barplot)
+
+    print('detecting enriched dbBact annotations')
+    enrich_func = ctx.get_action('dbbact', 'enrichment')
+    enriched_anno, = enrich_func(diff=diff_table, source='dsfdr', method=method, term_type='annotation', sig_threshold=sig_threshold, attack=attack, maxid=maxid, random_seed=random_seed)
+    enriched_anno_df = enriched_anno.view(pd.DataFrame)
+    print('found %d enriched dbbact terms' % len(enriched_anno_df))
+    res.append(enriched_anno)
+
+    terms_barplot_func = ctx.get_action('dbbact', 'plot_enrichment')
+    enriched_barplot, = terms_barplot_func(enriched=enriched_anno, labels=[label1, label2])
     res.append(enriched_barplot)
 
     print('done')

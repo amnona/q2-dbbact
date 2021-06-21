@@ -50,6 +50,8 @@ plugin.pipelines.register_function(
         # ('diff_asv_heatmap', Visualization),
         ('enriched_terms_table', FeatureData[Differential]),
         ('enriched_terms_barplot', Visualization),
+        ('enriched_anno_table', FeatureData[Differential]),
+        ('enriched_anno_barplot', Visualization),
         # ('enriched_terms_heatmap', Visualization),
         # ('enriched_term_venn', Visualization),
     ],
@@ -100,6 +102,11 @@ plugin.pipelines.register_function(
     },
     output_descriptions={'all_wordcloud': 'Wordcloud of all the features in the input table',
                          'diff_asv_table': 'Table of the differentially abundant ASVs between to the groups acoording to metadata field',
+                         'trimmed_table': 'The feature table after trimming of the primers (for alignment to dbBact sequences',
+                         'enriched_terms_table': 'dbBact terms enriched in either of the two ASV groups (identified in trimmed_table)',
+                         'enriched_terms_barplot': 'barplot of the dbBact terms listed in enriched_terms_table',
+                         'enriched_anno_table': 'dbBact annotations enriched in either of the two ASV groups (identified in trimmed_table)',
+                         'enriched_anno_barplot': 'barplot of the dbBact annotations listed in enriched_anno_table',
                          },
     name='dbBact term enrichment for differential abundance results',
     description=("Identify dbBact terms enriched in results of differential abundance (terms significantly more represented in either of the differential abundance groups or correlated with effect size)")
@@ -115,6 +122,7 @@ plugin.methods.register_function(
     parameters={
         'source': Str % Choices(['dsfdr', 'aldex2', 'dacomp', 'songbird', 'ancom', 'tsv']),
         'method': Str % Choices('groups', 'correlation'),
+        'term_type': Str % Choices(['term', 'annotation']),
         'random_seed': Int,
         'sig_threshold': Float,
         'diff_tsv': Str,
