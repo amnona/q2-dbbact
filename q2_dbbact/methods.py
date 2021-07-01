@@ -388,12 +388,18 @@ def trim_primers(table: biom.Table, repseqs: DNAFASTAFormat = None) -> biom.Tabl
                     break
             if region is not None:
                 # found a matching region - lets trim it
-                print('found exact region %s after %d left trmo' % (region, cpos))
+                print('found exact region %s after %d left trim' % (region, cpos))
                 trimmed_seqs_map = {}
                 for cseq in seqs:
                     trimmed_seqs_map[cseq] = cseq[cpos:]
             else:
-                raise ValueError('No matching primers found. Are the reads reverse-complemented?')
+                msg = 'No matching primers found. First 10 sequences used for testing (out of 100) are: \n'
+                msg += '%s\n' % test_seqs[:min(10, len(test_seqs))]
+                msg += 'dbBact supports only V1 (AGAGTTTGATC[AC]TGG[CT]TCAG), V3 (CCTACGGG[ACGT][CGT]GC[AT][CG]CAG) or V4 (GTGCCAGC[AC]GCCGCGGTAA) primers. A few possible error sources: \n' \
+                       '1. Are your reads from these regions?\n' \
+                       '2. Are yourreads reverse-complemented?\n' \
+                       '3. Did you trim a part of the reads following the primer? Reads should start immediately after the end of the primer\n'
+                raise ValueError(msg)
         keep_ids = trimmed_seqs_map.keys()
         table.filter(keep_ids, axis='observation', inplace=True)
         table.update_ids(trimmed_seqs_map, axis='observation', strict=False, inplace=True)
