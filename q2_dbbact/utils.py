@@ -63,7 +63,7 @@ def _seqs_from_repseqs(data: pd.DataFrame, repseqs: DNAFASTAFormat):
         for chead, cseq in _iter_fasta(str(repseqs)):
             if chead in data.index:
                 rename_ids[chead] = cseq
-        if len(rename_ids) < len(repseqs):
+        if len(rename_ids) < len(data):
             print('Missing rep. sequences for some hashes. Found %d out of %d' % (len(rename_ids), len(repseqs)))
         data.rename(index=rename_ids, inplace=True)
     else:
