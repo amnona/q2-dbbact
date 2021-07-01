@@ -1,3 +1,9 @@
+## v1.3.0 (2021-07-01)
+
+### Feat
+
+- Add better error msg for reads not matching any primer
+
 ## v1.2.0 (2021-07-01)
 
 ### Fix
