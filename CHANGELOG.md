@@ -1,3 +1,13 @@
+## v1.2.0 (2021-07-01)
+
+### Fix
+
+- Fix bug in interpreting repseqs in _seqs_from_repseqs()
+
+### Feat
+
+- add term-type option for enrichment allowing annotation enrichment analysis
+
 ## v1.1.1 (2021-06-13)
 
 ### Fix
