@@ -49,9 +49,9 @@ plugin.pipelines.register_function(
         ('diff_asv_table', FeatureData[Differential]),
         # ('diff_asv_heatmap', Visualization),
         ('enriched_terms_table', FeatureData[Differential]),
+        ('enriched_annotations_table', FeatureData[Differential]),
         ('enriched_terms_barplot', Visualization),
-        ('enriched_anno_table', FeatureData[Differential]),
-        ('enriched_anno_barplot', Visualization),
+        ('enriched_annotations_barplot', Visualization),
         # ('enriched_terms_heatmap', Visualization),
         # ('enriched_term_venn', Visualization),
     ],
@@ -105,8 +105,8 @@ plugin.pipelines.register_function(
                          'trimmed_table': 'The feature table after trimming of the primers (for alignment to dbBact sequences',
                          'enriched_terms_table': 'dbBact terms enriched in either of the two ASV groups (identified in trimmed_table)',
                          'enriched_terms_barplot': 'barplot of the dbBact terms listed in enriched_terms_table',
-                         'enriched_anno_table': 'dbBact annotations enriched in either of the two ASV groups (identified in trimmed_table)',
-                         'enriched_anno_barplot': 'barplot of the dbBact annotations listed in enriched_anno_table',
+                         'enriched_annotations_table': 'dbBact annotations enriched in either of the two ASV groups (identified in trimmed_table)',
+                         'enriched_annotations_barplot': 'barplot of the dbBact annotations listed in enriched_anno_table',
                          },
     name='dbBact term enrichment for differential abundance results',
     description=("Identify dbBact terms enriched in results of differential abundance (terms significantly more represented in either of the differential abundance groups or correlated with effect size)")
@@ -136,6 +136,7 @@ plugin.methods.register_function(
     parameter_descriptions={
         'source': 'Origin of the differentail abundance',
         'method': '"groups" to compare term enrichemnent between significantly enriched sequences in both directions, "correlation" to detect dbbact terms significanly correlated/anti-correlated with the effect size.',
+        'term_type': '"term" to get enriched dbBact terms, "annotation" to get list of enriched dbBact annotations in one group compared to the other',
         'random_seed': 'If provided, use as the random seed for the enrichment permutation test (to ensure complete replication)',
         'diff_tsv': ('A tsv table input file (e.g. from ancom when using --p-source ancom, or general tsv when using --p-source tsv).'
                      ' Use instead of --i-diff. When using tsv, file should contain the columns:"id" (sequence), "effect", "pval", "reject".'),

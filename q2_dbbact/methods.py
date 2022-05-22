@@ -8,7 +8,6 @@ import dbbact_calour.dbbact
 from typing import List
 
 from .utils import _iter_fasta, _seqs_from_repseqs, _load_diff_abundance, _test_exact_region, _test_embedded_primers, _trim_known_primer
-from .visualizations import venn, heatmap, plot_enrichment, draw_wordcloud_vis
 
 
 def embed_seqs(table: biom.Table, repseqs: DNAFASTAFormat) -> biom.Table:
@@ -315,6 +314,12 @@ def enrich_pipeline(ctx,
     print('found %d enriched dbbact terms' % len(enriched_df))
     res.append(enriched)
 
+    print('detecting enriched dbBact annotations')
+    enriched_anno, = enrich_func(diff=diff_table, source='dsfdr', term_type='annotation', method=method, sig_threshold=sig_threshold, attack=attack, maxid=maxid, random_seed=random_seed)
+    enriched_anno_df = enriched.view(pd.DataFrame)
+    print('found %d enriched dbbact annotations' % len(enriched_anno_df))
+    res.append(enriched_anno)
+
     print('creating enriched terms barplot')
     # create the lables for the 2 groups
     metadata_df = metadata.to_dataframe()
@@ -333,22 +338,29 @@ def enrich_pipeline(ctx,
     enriched_barplot, = terms_barplot_func(enriched=enriched, labels=[label1, label2])
     res.append(enriched_barplot)
 
-    print('detecting enriched dbBact annotations')
-    enrich_func = ctx.get_action('dbbact', 'enrichment')
-    enriched_anno, = enrich_func(diff=diff_table, source='dsfdr', method=method, term_type='annotation', sig_threshold=sig_threshold, attack=attack, maxid=maxid, random_seed=random_seed)
-    enriched_anno_df = enriched_anno.view(pd.DataFrame)
-    print('found %d enriched dbbact terms' % len(enriched_anno_df))
-    res.append(enriched_anno)
-
-    terms_barplot_func = ctx.get_action('dbbact', 'plot_enrichment')
-    enriched_barplot, = terms_barplot_func(enriched=enriched_anno, labels=[label1, label2])
-    res.append(enriched_barplot)
+    print('creating enriched annotations barplot')
+    enriched_annotations_barplot, = terms_barplot_func(enriched=enriched_anno, labels=[label1, label2])
+    res.append(enriched_annotations_barplot)
 
     print('done')
     return tuple(res)
 
 
 def trim_primers(table: biom.Table, repseqs: DNAFASTAFormat = None) -> biom.Table:
+    '''Remove dbBact supported primers from all sequences
+    This is done since all sequences in dbBact are indexed based on the sequence immediately following the supported primers (v1/v3/v4)
+
+    The primer is detected in several ways:
+    1.
+
+    Parameters
+    ----------
+    table: biom.Tabls
+        Can contain either sequences (i.e. dada2/deblur was run with --p-no-hashed-feature-ids) or hashes (i.e. dada2/deblur was run with --p-hashed-feature-ids, which is the default for qiime2)
+        If the table contains hashes, you must supplu the repseqs parameter as well
+    repseqs: the hash->sequence conversion file
+        The output of denoising stored to the --o-representative-sequences file
+    '''
     print('trim-primers')
 
     # incorporate the repseqs into the biom table if needed
@@ -374,13 +386,14 @@ def trim_primers(table: biom.Table, repseqs: DNAFASTAFormat = None) -> biom.Tabl
     else:
         # no exact match - so maybe primer is embedded?
         min_primer_len = 10
+        # look if we find a supported primer (v1/v3/v4) in the first 25 nucleotides for at least 0.25 of the sequences
         primer, region = _test_embedded_primers(seqs, max_start=25, min_primer_len=min_primer_len, min_fraction=0.25)
         if region is not None:
             print('found embedded primer %s for region %s. removing it.' % (primer, region))
             # let's trim the primers
             trimmed_seqs_map = _trim_known_primer(seqs, primer, rprimer=None, length=0, remove_ambig=True, keep_primers=False)
         else:
-            # no primer embedded. So maybe need to trim just first few bases?
+            # no primer embedded. So maybe need to trim just first few bases? (i.e. less than min_primer_len of the primer is in the sequences)
             region = None
             for cpos in range(min_primer_len):
                 region = _test_exact_region(test_seqs, min_fraction=0.5, ltrim=cpos)
@@ -401,6 +414,27 @@ def trim_primers(table: biom.Table, repseqs: DNAFASTAFormat = None) -> biom.Tabl
                        '3. Did you trim a part of the reads following the primer? Reads should start immediately after the end of the primer\n'
                 raise ValueError(msg)
         keep_ids = trimmed_seqs_map.keys()
+        print('keeping %d out of %d sequences' % (len(keep_ids), len(seqs)))
+
+        # check if we got identical sequences originating in reads with different primers (should not happen - could be due to prior incomplete primer trimming)
+        if len(keep_ids) != len(set(trimmed_seqs_map.values())):
+            print('Duplicate sequences identified after primer removal. This could be due to using an external primer trimming software (such as cutadapt). For cutadapt, we recommend using the "--discard-untrimmed" parameter.')
+            rev_dict = {}
+            for key, value in trimmed_seqs_map.items():
+                rev_dict.setdefault(value, set()).add(key)
+            result = filter(lambda x: len(x) > 1, rev_dict.values())
+            print('The following sequences are identical after primer removal (showing first 10 sequences):')
+            result = list(result)
+            if len(result) > 10:
+                result = result[:10]
+            print(result)
+
+            # collapse the reads that have same sequence after primer trimming
+            def bin_f(cid, cm):
+                return trimmed_seqs_map[cid]
+            print('Collapsing on sequences after trim')
+            table = table.collapse(bin_f, axis='observation')
+
         table.filter(keep_ids, axis='observation', inplace=True)
         table.update_ids(trimmed_seqs_map, axis='observation', strict=False, inplace=True)
 
