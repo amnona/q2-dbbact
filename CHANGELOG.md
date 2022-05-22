@@ -1,3 +1,9 @@
+## v1.4.0 (2022-05-22)
+
+### Feat
+
+- Support primer trimming after incomplete external primer trimming software
+
 ## v1.3.0 (2021-07-01)
 
 ### Feat
