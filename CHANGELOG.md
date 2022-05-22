@@ -1,3 +1,43 @@
+## v1.3.0 (2021-07-01)
+
+### Feat
+
+- Add better error msg for reads not matching any primer
+
+## v1.2.0 (2021-07-01)
+
+### Fix
+
+- Fix bug in interpreting repseqs in _seqs_from_repseqs()
+
+### Feat
+
+- add term-type option for enrichment allowing annotation enrichment analysis
+
+## v1.1.1 (2021-06-13)
+
+### Fix
+
+- change input parameter name for wordcloud and fix unit testing
+
+## v1.1.0 (2021-06-12)
+
+### Feat
+
+- add trim-primers and primer testing in all methods/visualizations
+
+## v1.0.3 (2021-06-01)
+
+### Fix
+
+- add pypi markdown support for readme
+
+## v1.0.2 (2021-06-01)
+
+### Fix
+
+- fix the readme to work on pypi
+
 ## v1.0.1 (2021-06-01)
 
 ### Fix

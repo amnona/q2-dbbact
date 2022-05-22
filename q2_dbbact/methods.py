@@ -7,8 +7,7 @@ import dbbact_calour
 import dbbact_calour.dbbact
 from typing import List
 
-from .utils import _iter_fasta, _seqs_from_repseqs, _load_diff_abundance
-from .visualizations import venn, heatmap, plot_enrichment, draw_wordcloud_vis
+from .utils import _iter_fasta, _seqs_from_repseqs, _load_diff_abundance, _test_exact_region, _test_embedded_primers, _trim_known_primer
 
 
 def embed_seqs(table: biom.Table, repseqs: DNAFASTAFormat) -> biom.Table:
@@ -21,7 +20,7 @@ def embed_seqs(table: biom.Table, repseqs: DNAFASTAFormat) -> biom.Table:
     return table
 
 
-def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_tsv: str = None, source: str = 'dsfdr', method: str = 'groups', sig_threshold: float = 0.1, ancom_stat: str = None, attack: bool = False, maxid: int = None, random_seed: int = None) -> pd.DataFrame:
+def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_tsv: str = None, source: str = 'dsfdr', method: str = 'groups', term_type: str = 'term', sig_threshold: float = 0.1, ancom_stat: str = None, attack: bool = False, maxid: int = None, random_seed: int = None) -> pd.DataFrame:
     ca.set_log_level('INFO')
     db = dbbact_calour.dbbact.DBBact()
     db.set_log_level('INFO')
@@ -30,13 +29,21 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
     exp = _load_diff_abundance(diff=diff, diff_tsv=diff_tsv, source=source, ancom_stat=ancom_stat, repseqs=repseqs, sig_threshold=sig_threshold)
     ndata = exp.feature_metadata
 
+    # check if the experiment contains trimmed sequences. otherwise let the user know
+    seqs = ndata.sample(n=np.min([500, len(ndata)])).index.values
+    region = _test_exact_region(seqs)
+    if region is None:
+        raise ValueError('Table seems to contain untrimmed sequences. Please run qiime dbbact trim-primers on the table prior to running enrichment.')
+    else:
+        print('Identified region %s' % region)
+
     # do the dbbact term enrichment test (using 2 feature groups or feature effect size rank correlation)
     if method == 'groups':
         print('%d ASVs' % len(exp.feature_metadata))
         exp = exp.filter_by_metadata('reject', ['1'], axis='f')
         print('%d significant ASVs' % len(exp.feature_metadata))
         pos_features = ndata[ndata['effect'] > 0].index.values
-        res = db.enrichment(exp, features=pos_features, max_id=maxid, random_seed=random_seed)
+        res = db.enrichment(exp, features=pos_features, term_type=term_type, max_id=maxid, random_seed=random_seed)
         df = res[0]
     elif method == 'correlation':
         print('searching for dbbact term enrichment for %d ASVs' % len(exp.feature_metadata))
@@ -100,6 +107,14 @@ def single_enrichment(bg_table: biom.Table = None, test_table: biom.Table = None
                                 feature_metadata=pd.DataFrame({'_feature_id': all_features}, index=all_features),
                                 sparse=False)
 
+    # check if the experiment contains trimmed sequences. otherwise let the user know
+    seqs = exp.feature_metadata.sample(n=np.min([500, len(exp.feature_metadata)])).index.values
+    region = _test_exact_region(seqs)
+    if region is None:
+        raise ValueError('Table seems to contain untrimmed sequences. Please run qiime dbbact trim-primers on the table prior to running enrichment.')
+    else:
+        print('Identified region %s' % region)
+
     res = db.enrichment(exp=exp, features=seqs, method='card_mean')
     term_table = res[0]
     if len(term_table) == 0:
@@ -139,6 +154,15 @@ def bg_term_enrichment(bg_terms: List[str], test_table: biom.Table = None, test_
                                 sample_metadata=pd.DataFrame({'_sample_id': ['s1']}),
                                 feature_metadata=pd.DataFrame({'_feature_id': seqs}, index=seqs),
                                 sparse=False)
+
+    # check if the experiment contains trimmed sequences. otherwise let the user know
+    seqs = exp.feature_metadata.sample(n=np.min([500, len(exp.feature_metadata)])).index.values
+    region = _test_exact_region(seqs)
+    if region is None:
+        raise ValueError('Table seems to contain untrimmed sequences. Please run qiime dbbact trim-primers on the table prior to running enrichment.')
+    else:
+        print('Identified region %s' % region)
+
     exp = exp.normalize()
 
     # do the background enrichment analysis
@@ -257,9 +281,15 @@ def enrich_pipeline(ctx,
                     maxid=None,
                     random_seed=0):
     res = []
+
+    print('trimming primers if needed')
+    trim_func = ctx.get_action('dbbact', 'trim_primers')
+    table, = trim_func(table=table, repseqs=repseqs)
+    res.append(table)
+
     print('generating initial wordcloud')
     wordcloud_func = ctx.get_action('dbbact', 'draw_wordcloud_vis')
-    wordcloud, = wordcloud_func(data=table, repseqs=repseqs)
+    wordcloud, = wordcloud_func(table=table, repseqs=repseqs)
     res.append(wordcloud)
 
     print('detecting differetially abundant features')
@@ -284,6 +314,12 @@ def enrich_pipeline(ctx,
     print('found %d enriched dbbact terms' % len(enriched_df))
     res.append(enriched)
 
+    print('detecting enriched dbBact annotations')
+    enriched_anno, = enrich_func(diff=diff_table, source='dsfdr', term_type='annotation', method=method, sig_threshold=sig_threshold, attack=attack, maxid=maxid, random_seed=random_seed)
+    enriched_anno_df = enriched.view(pd.DataFrame)
+    print('found %d enriched dbbact annotations' % len(enriched_anno_df))
+    res.append(enriched_anno)
+
     print('creating enriched terms barplot')
     # create the lables for the 2 groups
     metadata_df = metadata.to_dataframe()
@@ -302,5 +338,104 @@ def enrich_pipeline(ctx,
     enriched_barplot, = terms_barplot_func(enriched=enriched, labels=[label1, label2])
     res.append(enriched_barplot)
 
+    print('creating enriched annotations barplot')
+    enriched_annotations_barplot, = terms_barplot_func(enriched=enriched_anno, labels=[label1, label2])
+    res.append(enriched_annotations_barplot)
+
     print('done')
     return tuple(res)
+
+
+def trim_primers(table: biom.Table, repseqs: DNAFASTAFormat = None) -> biom.Table:
+    '''Remove dbBact supported primers from all sequences
+    This is done since all sequences in dbBact are indexed based on the sequence immediately following the supported primers (v1/v3/v4)
+
+    The primer is detected in several ways:
+    1.
+
+    Parameters
+    ----------
+    table: biom.Tabls
+        Can contain either sequences (i.e. dada2/deblur was run with --p-no-hashed-feature-ids) or hashes (i.e. dada2/deblur was run with --p-hashed-feature-ids, which is the default for qiime2)
+        If the table contains hashes, you must supplu the repseqs parameter as well
+    repseqs: the hash->sequence conversion file
+        The output of denoising stored to the --o-representative-sequences file
+    '''
+    print('trim-primers')
+
+    # incorporate the repseqs into the biom table if needed
+    if repseqs is not None:
+        print('converting hashes to sequences using repseqs file')
+        table = embed_seqs(table, repseqs)
+
+    seqs = table.ids(axis='observation')
+
+    # check if table contains hashed sequences and repseqs not supplied
+    if len(seqs[0]) == 32:
+        if repseqs is None:
+            raise ValueError('Table seems to contain hashes and not sequences. Please supply the --i-repseqs representative sequences file, or create the table (deblur/dada2) with the --p-no-hashed-feature-ids flag.')
+
+    # take a random subset of ASVs to examine
+    num_rand = np.min([100, len(seqs)])
+    test_seqs = np.random.choice(seqs, num_rand, replace=False)
+
+    # look if there is an exact match to any dbBact primer region
+    region = _test_exact_region(test_seqs, min_fraction=0.5, ltrim=0)
+    if region is not None:
+        print('Found exact match for region %s. No need for trimming.' % region)
+    else:
+        # no exact match - so maybe primer is embedded?
+        min_primer_len = 10
+        # look if we find a supported primer (v1/v3/v4) in the first 25 nucleotides for at least 0.25 of the sequences
+        primer, region = _test_embedded_primers(seqs, max_start=25, min_primer_len=min_primer_len, min_fraction=0.25)
+        if region is not None:
+            print('found embedded primer %s for region %s. removing it.' % (primer, region))
+            # let's trim the primers
+            trimmed_seqs_map = _trim_known_primer(seqs, primer, rprimer=None, length=0, remove_ambig=True, keep_primers=False)
+        else:
+            # no primer embedded. So maybe need to trim just first few bases? (i.e. less than min_primer_len of the primer is in the sequences)
+            region = None
+            for cpos in range(min_primer_len):
+                region = _test_exact_region(test_seqs, min_fraction=0.5, ltrim=cpos)
+                if region is not None:
+                    break
+            if region is not None:
+                # found a matching region - lets trim it
+                print('found exact region %s after %d left trim' % (region, cpos))
+                trimmed_seqs_map = {}
+                for cseq in seqs:
+                    trimmed_seqs_map[cseq] = cseq[cpos:]
+            else:
+                msg = 'No matching primers found. First 10 sequences used for testing (out of 100) are: \n'
+                msg += '%s\n' % test_seqs[:min(10, len(test_seqs))]
+                msg += 'dbBact supports only V1 (AGAGTTTGATC[AC]TGG[CT]TCAG), V3 (CCTACGGG[ACGT][CGT]GC[AT][CG]CAG) or V4 (GTGCCAGC[AC]GCCGCGGTAA) primers. A few possible error sources: \n' \
+                       '1. Are your reads from these regions?\n' \
+                       '2. Are yourreads reverse-complemented?\n' \
+                       '3. Did you trim a part of the reads following the primer? Reads should start immediately after the end of the primer\n'
+                raise ValueError(msg)
+        keep_ids = trimmed_seqs_map.keys()
+        print('keeping %d out of %d sequences' % (len(keep_ids), len(seqs)))
+
+        # check if we got identical sequences originating in reads with different primers (should not happen - could be due to prior incomplete primer trimming)
+        if len(keep_ids) != len(set(trimmed_seqs_map.values())):
+            print('Duplicate sequences identified after primer removal. This could be due to using an external primer trimming software (such as cutadapt). For cutadapt, we recommend using the "--discard-untrimmed" parameter.')
+            rev_dict = {}
+            for key, value in trimmed_seqs_map.items():
+                rev_dict.setdefault(value, set()).add(key)
+            result = filter(lambda x: len(x) > 1, rev_dict.values())
+            print('The following sequences are identical after primer removal (showing first 10 sequences):')
+            result = list(result)
+            if len(result) > 10:
+                result = result[:10]
+            print(result)
+
+            # collapse the reads that have same sequence after primer trimming
+            def bin_f(cid, cm):
+                return trimmed_seqs_map[cid]
+            print('Collapsing on sequences after trim')
+            table = table.collapse(bin_f, axis='observation')
+
+        table.filter(keep_ids, axis='observation', inplace=True)
+        table.update_ids(trimmed_seqs_map, axis='observation', strict=False, inplace=True)
+
+    return table

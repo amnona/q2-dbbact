@@ -1,29 +1,39 @@
 from q2_types.feature_data import DNAFASTAFormat
 import biom
 import pandas as pd
+import numpy as np
 import os
 import calour as ca
 import dbbact_calour
 import dbbact_calour.dbbact
 from typing import List
 
-from .utils import _seqs_from_repseqs, _load_diff_abundance
+from .utils import _seqs_from_repseqs, _load_diff_abundance, _test_exact_region
 
 
-def draw_wordcloud_vis(output_dir: str, data: biom.Table, repseqs: DNAFASTAFormat = None, prev_thresh: float = 0.3, focus_terms: List[str] = None):
+def draw_wordcloud_vis(output_dir: str, table: biom.Table, repseqs: DNAFASTAFormat = None, prev_thresh: float = 0.3, focus_terms: List[str] = None):
     '''draw the wordcloud for features in the biom table and save outputs'''
     db = dbbact_calour.dbbact.DBBact()
     db.set_log_level('INFO')
 
-    df = data.to_dataframe()
+    df = table.to_dataframe()
 
     if repseqs is not None:
-        data = _seqs_from_repseqs(data=df, repseqs=repseqs)
+        df = _seqs_from_repseqs(data=df, repseqs=repseqs)
 
     if len(df.iloc[0].name) == 32:
         raise ValueError('input table seems to contain hashes and not sequences. Please supply the rep-seqs.qza file.')
 
     exp = ca.AmpliconExperiment.from_pandas(df.T)
+
+    # check if the experiment contains trimmed sequences. otherwise let the user know
+    seqs = exp.feature_metadata.sample(n=np.min([500, len(exp.feature_metadata)])).index.values
+    region = _test_exact_region(seqs)
+    if region is None:
+        raise ValueError('Table seems to contain untrimmed sequences. Please run qiime dbbact trim-primers on the table prior to running enrichment.')
+    else:
+        print('Identified region %s' % region)
+
     print('%d ASVs in table before prevalence filtering' % len(exp.feature_metadata))
     exp = exp.filter_prevalence(prev_thresh)
     print('%d ASVs in table remain after prevalence filtering (%f)' % (len(exp.feature_metadata), prev_thresh))
@@ -117,6 +127,15 @@ def venn(output_dir: str, terms: List[str], diff: pd.DataFrame = None, repseqs: 
     exp = _load_diff_abundance(diff=diff, diff_tsv=diff_tsv, source=source, ancom_stat=ancom_stat, repseqs=repseqs, sig_threshold=sig_threshold)
     # exp.feature_metadata['_calour_direction'] = exp.feature_metadata['dir']
     exp.feature_metadata['_calour_direction'] = exp.feature_metadata['dir'].replace({0: label1, 1: label2}, inplace=False)
+
+    # check if the experiment contains trimmed sequences. otherwise let the user know
+    seqs = exp.feature_metadata.sample(n=np.min([500, len(exp.feature_metadata)])).index.values
+    region = _test_exact_region(seqs)
+    if region is None:
+        raise ValueError('Table seems to contain untrimmed sequences. Please run qiime dbbact trim-primers on the table prior to running enrichment.')
+    else:
+        print('Identified region %s' % region)
+
     f = db.plot_term_venn_all(terms, exp, max_size=max_size, set_colors=set_colors)
     f.savefig(os.path.join(output_dir, 'venn.svg'))
     f.savefig(os.path.join(output_dir, 'venn.pdf'))

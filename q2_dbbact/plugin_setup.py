@@ -6,7 +6,7 @@ from q2_types.feature_table import (
 from q2_types.feature_data import (FeatureData, Differential, Sequence, Taxonomy, )
 
 from . import __version__
-from .methods import single_enrichment, enrichment, embed_seqs, bg_term_enrichment, diff_abundance, enrich_pipeline
+from .methods import single_enrichment, enrichment, embed_seqs, bg_term_enrichment, diff_abundance, enrich_pipeline, trim_primers
 from .visualizations import draw_wordcloud_vis, plot_enrichment, heatmap, venn
 
 
@@ -44,11 +44,14 @@ plugin.pipelines.register_function(
     #          ('enriched_terms_heatmap', Visualization),
     #          ('enriched_term_venn', Visualization)],
     outputs=[
+        ('trimmed_table', FeatureTable[Frequency]),
         ('all_wordcloud', Visualization),
         ('diff_asv_table', FeatureData[Differential]),
         # ('diff_asv_heatmap', Visualization),
         ('enriched_terms_table', FeatureData[Differential]),
+        ('enriched_annotations_table', FeatureData[Differential]),
         ('enriched_terms_barplot', Visualization),
+        ('enriched_annotations_barplot', Visualization),
         # ('enriched_terms_heatmap', Visualization),
         # ('enriched_term_venn', Visualization),
     ],
@@ -99,6 +102,11 @@ plugin.pipelines.register_function(
     },
     output_descriptions={'all_wordcloud': 'Wordcloud of all the features in the input table',
                          'diff_asv_table': 'Table of the differentially abundant ASVs between to the groups acoording to metadata field',
+                         'trimmed_table': 'The feature table after trimming of the primers (for alignment to dbBact sequences',
+                         'enriched_terms_table': 'dbBact terms enriched in either of the two ASV groups (identified in trimmed_table)',
+                         'enriched_terms_barplot': 'barplot of the dbBact terms listed in enriched_terms_table',
+                         'enriched_annotations_table': 'dbBact annotations enriched in either of the two ASV groups (identified in trimmed_table)',
+                         'enriched_annotations_barplot': 'barplot of the dbBact annotations listed in enriched_anno_table',
                          },
     name='dbBact term enrichment for differential abundance results',
     description=("Identify dbBact terms enriched in results of differential abundance (terms significantly more represented in either of the differential abundance groups or correlated with effect size)")
@@ -114,6 +122,7 @@ plugin.methods.register_function(
     parameters={
         'source': Str % Choices(['dsfdr', 'aldex2', 'dacomp', 'songbird', 'ancom', 'tsv']),
         'method': Str % Choices('groups', 'correlation'),
+        'term_type': Str % Choices(['term', 'annotation']),
         'random_seed': Int,
         'sig_threshold': Float,
         'diff_tsv': Str,
@@ -127,6 +136,7 @@ plugin.methods.register_function(
     parameter_descriptions={
         'source': 'Origin of the differentail abundance',
         'method': '"groups" to compare term enrichemnent between significantly enriched sequences in both directions, "correlation" to detect dbbact terms significanly correlated/anti-correlated with the effect size.',
+        'term_type': '"term" to get enriched dbBact terms, "annotation" to get list of enriched dbBact annotations in one group compared to the other',
         'random_seed': 'If provided, use as the random seed for the enrichment permutation test (to ensure complete replication)',
         'diff_tsv': ('A tsv table input file (e.g. from ancom when using --p-source ancom, or general tsv when using --p-source tsv).'
                      ' Use instead of --i-diff. When using tsv, file should contain the columns:"id" (sequence), "effect", "pval", "reject".'),
@@ -153,6 +163,24 @@ plugin.methods.register_function(
     output_descriptions={'merged': 'The biom table with embedded representative sequences'},
     name='embed sequences into hashed biom table',
     description=('embed the representative sequences into the biom table')
+)
+
+
+plugin.methods.register_function(
+    function=trim_primers,
+    inputs={'repseqs': FeatureData[Sequence],
+            'table': FeatureTable[Frequency]},
+    outputs=[('trimmed', FeatureTable[Frequency])],
+    parameters={},
+    input_descriptions={
+        'table': 'The biom table with ASVs to be trimmed',
+        'repseqs': 'The corresponding representative sequences (if not embedded in the table using the --p-no-hashed-feature-ids parameter when denoising)'
+    },
+    output_descriptions={'trimmed': 'The biom table with primer-trimmed sequences'},
+    name='trim primers from table sequences',
+    description=('Make sequences in the biom table compatible with dbBact. The method will automatically identify the dbBact supported primers in the sequences and trim the sequences so '
+                 'all sequences in the biom table start at the end of the supported forward primer. Currently supported dbBact primers are V1 (AGAGTTTGATC[AC]TGG[CT]TCAG), '
+                 'V3 (CCTACGGG[ACGT][CGT]GC[AT][CG]CAG) and V4 (GTGCCAGC[AC]GCCGCGGTAA)')
 )
 
 
@@ -258,7 +286,7 @@ plugin.methods.register_function(
 
 plugin.visualizers.register_function(
     function=draw_wordcloud_vis,
-    inputs={'data': FeatureTable[Frequency],
+    inputs={'table': FeatureTable[Frequency],
             'repseqs': FeatureData[Sequence],
             },
     parameters={
@@ -266,7 +294,7 @@ plugin.visualizers.register_function(
         'focus_terms': List[Str],
     },
     input_descriptions={
-        'data': 'The biom table to draw the wordcloud for.'
+        'table': 'The biom table to draw the wordcloud for.'
     },
     parameter_descriptions={
         'prev_thresh': 'Mininal prevalence (fraction of samples sequence is present) in order to include sequence in wordcloud stats.',
