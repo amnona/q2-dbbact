@@ -40,7 +40,7 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
     # do the dbbact term enrichment test (using 2 feature groups or feature effect size rank correlation)
     if method == 'groups':
         print('%d ASVs' % len(exp.feature_metadata))
-        exp = exp.filter_by_metadata('reject', ['1'], axis='f')
+        exp = exp.filter_by_metadata('reject', ['1', 1], axis='f')
         print('%d significant ASVs' % len(exp.feature_metadata))
         pos_features = ndata[ndata['effect'] > 0].index.values
         res = db.enrichment(exp, features=pos_features, term_type=term_type, max_id=maxid, random_seed=random_seed)
@@ -59,6 +59,80 @@ def enrichment(diff: pd.DataFrame = None, repseqs: DNAFASTAFormat = None, diff_t
     # need to rename the index to "id"
     # and cannot contain non-numeric columns
     df.drop('term', axis='columns', inplace=True)
+    df.index.rename('id', inplace=True)
+    return df
+
+
+def continuous_enrichment(table: biom.Table,
+                   metadata: pd.DataFrame,
+                   field: str,
+                   val1: List[str] = None,
+                   val2: List[str] = None,
+                   repseqs: DNAFASTAFormat = None,
+                   freq_weight: str = 'rank',
+                   random_seed: int = 0,
+                   fdr_method: str = 'dsfdr',
+                   term_type: str = 'term',
+                   alpha: float = 0.1,
+                   maxid: int = None) -> pd.DataFrame:
+
+    ca.set_log_level('INFO')
+    db = dbbact_calour.dbbact.DBBact()
+    db.set_log_level('INFO')
+
+    # set random seed to None (i.e. random every time) if 0 is provided
+    if random_seed == 0:
+        random_seed = None
+
+    metadata = metadata.to_dataframe()
+
+    # check and prepare the metadata columns for the testing
+    md_fields = metadata.columns
+    if field not in md_fields:
+        raise ValueError('Field %s not found in metadata file' % field)
+    labels = metadata[field].unique()
+    n = len(labels)
+    if n == 1:
+        raise ValueError('Only one category in metadata column "%s". Aborting' % field)
+    if val1 is None and val2 is None:
+        if n == 2:
+            val1 = [labels[0]]
+            val2 = [labels[1]]
+            print('No values supplied for field %s, assigning from the two values present (%s, %s)' % (field, val1, val2))
+        else:
+            raise ValueError('Cannot perform %s test on more than two categories in metadata and val1 and val2 not supplied. Aborting' % statistical_test)
+
+    if val1 is not None:
+        if len([x for x in metadata[field] if x in val1]) == 0:
+            raise ValueError('No values matching val1 (%s) found in metadata field %s' % (val1, field))
+    if val2 is not None:
+        if len([x for x in metadata[field] if x in val2]) == 0:
+            raise ValueError('No values matching val2 (%s) found in metadata field %s' % (val2, field))
+
+    # create the calour.AmpliconExperiment from the table and metadata
+    samples = table.ids(axis='sample')
+    features = table.ids(axis='observation')
+    feature_metadata = pd.DataFrame(index=features, columns={'_feature_id': features})
+    # use repseqs if supplied
+    if repseqs is not None:
+        print('converting hashes to sequences using repseqs file')
+        feature_metadata = _seqs_from_repseqs(feature_metadata, repseqs)
+    metadata = metadata.filter(items=samples, axis='index')
+    exp = ca.AmpliconExperiment(data=table.transpose().matrix_data, sample_metadata=metadata, feature_metadata=feature_metadata, sparse=False)
+    print('created experiment %r' % exp)
+
+    # do the continuous enrichment test ( using dbbact.sample_enrichment() )
+    res = db.sample_enrichment(exp, field, value1=val1, value2=val2, term_type=term_type, fdr_method=fdr_method, alpha=alpha, freq_weight=freq_weight, max_id=maxid, random_seed=random_seed)
+    df = res.feature_metadata
+    print('found %d enriched terms' % len(df))
+
+    # qiime2 plugin stuff:
+    # need to rename the index to "id"
+    # and cannot contain non-numeric columns so need to create a new column with the direction as number
+    df.drop('term', axis='columns', inplace=True)
+    df.rename({'_calour_stat': 'odif'}, axis='columns', inplace=True)
+    df['dir(1=%s,-1=%s)' % (val1, val2)] = df['_calour_direction'].apply(lambda x: 1 if x == val1 else -1)
+    df.drop('_calour_direction', axis='columns', inplace=True)
     df.index.rename('id', inplace=True)
     return df
 
@@ -212,14 +286,14 @@ def diff_abundance(table: biom.Table,
     labels = metadata[field].unique()
     n = len(labels)
     if n == 1:
-        raise ValueError('Only one category in metadata column. Aborting')
+        raise ValueError('Only one category in metadata column "%s". Aborting' % field)
     if val1 is None and val2 is None:
         if n == 2:
             val1 = [labels[0]]
             val2 = [labels[1]]
             print('No values supplied for field, assigning from the two values present (%s, %s)' % (val1, val2))
         else:
-            raise ValueError('Cannot perform %s test on more than two categories in metadata and val1 and val2 not supplied. Aborting' % statistical_test)
+            raise ValueError('Cannot perform %s test on more than two categories in metadata field "%s", and val1 and val2 not supplied. Aborting' % (field, statistical_test))
 
     if val1 is not None:
         if len([x for x in metadata[field] if x in val1]) == 0:

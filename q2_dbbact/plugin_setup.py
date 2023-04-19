@@ -6,7 +6,7 @@ from q2_types.feature_table import (
 from q2_types.feature_data import (FeatureData, Differential, Sequence, Taxonomy, )
 
 from . import __version__
-from .methods import single_enrichment, enrichment, embed_seqs, bg_term_enrichment, diff_abundance, enrich_pipeline, trim_primers
+from .methods import single_enrichment, enrichment, embed_seqs, bg_term_enrichment, diff_abundance, enrich_pipeline, trim_primers, continuous_enrichment
 from .visualizations import draw_wordcloud_vis, plot_enrichment, heatmap, venn
 
 
@@ -147,6 +147,48 @@ plugin.methods.register_function(
     output_descriptions={'enriched': 'the enriched dbBact terms'},
     name='dbBact term enrichment for differential abundance results',
     description=("Identify dbBact terms enriched in results of differential abundance (terms significantly more represented in either of the differential abundance groups or correlated with effect size)")
+)
+
+
+plugin.methods.register_function(
+    function=continuous_enrichment,
+    inputs={'table': FeatureTable[Frequency],
+            'repseqs': FeatureData[Sequence]
+            },
+    outputs=[('enriched', FeatureData[Differential])],
+    parameters={
+        'metadata': Metadata,
+        'field': Str,
+        'val1': List[Str],
+        'val2': List[Str],
+        'random_seed': Int,
+        'fdr_method': Str % Choices(_fdr_method),
+        'freq_weight': Str % Choices(['log2', 'rank', 'linear', 'binary']),
+        'term_type': Str % Choices(['term', 'annotation']),
+        'random_seed': Int,
+        'maxid': Int,
+        'alpha': Float,
+        'random_seed': Int
+    },
+    input_descriptions={
+        'table': 'The biom table with hashed ASV IDs',
+        'repseqs': 'The corresponding repseqs file with hashed ASV IDs',
+    },
+    parameter_descriptions={
+        'metadata': 'Metadata (mapping) file for the table',
+        'field': 'The metadata field on which to perform the differential abundance test',
+        'val1': 'Metadata values (in field) for samples in group1. Can supply multiple values',
+        'val2': 'Metadata values (in field) for samples in group2. Can supply multiple values. If not provided, take all samples not in group1',
+        'freq_weight': 'The method to use for weighting the frequency of each ASV in the table. "rank" - rank of the feature frequency across samples, "log2" - log2 of the frequency, "linear" - linear frequency, "binary" - binary frequency (1 if >0, 0 otherwise)',
+        'term_type': '"term" to get enriched dbBact terms, "annotation" to get list of enriched dbBact annotations in one group compared to the other',
+        'random_seed': 'If provided, use as the random seed for the enrichment permutation test (to ensure complete replication)',
+        'maxid': 'The maximal dbBact annotation id to use (to enable replication of results after new annotations are added to dbBact',
+        'alpha': 'The FDR threshold to use for enriched term significance',
+        'random_seed': 'If provided, use as the random seed for the enrichment permutation test (to ensure complete replication)'
+    },
+    output_descriptions={'enriched': 'the enriched dbBact terms'},
+    name='dbBact term enrichment using continuous frequency weights',
+    description=("Identify dbBact terms enriched between two sample groups using continuous frequency weights")
 )
 
 
