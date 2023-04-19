@@ -64,7 +64,8 @@ def plot_enrichment(output_dir: str, enriched: pd.DataFrame, max_show: int = 10,
     '''Plot the enriched terms bar plot
     '''
     enriched['term'] = enriched.index.values
-    ax = ca.plotting.plot_enrichment(None, enriched, max_show=max_show, max_len=max_len, colors=colors, labels=labels, enriched_exp_color=enriched_exp_color)
+    numbers_kwargs = {'color': enriched_exp_color, 'weight': 'bold'}
+    ax = ca.plotting.plot_enrichment(None, enriched, max_show=max_show, max_len=max_len, colors=colors, labels=labels, numbers_kwargs=numbers_kwargs)
     ax.figure.tight_layout()
     ax.figure.savefig(os.path.join(output_dir, 'enriched_terms.svg'), bbox_inches='tight')
     ax.figure.savefig(os.path.join(output_dir, 'enriched_terms.pdf'), bbox_inches='tight')
