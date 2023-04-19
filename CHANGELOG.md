@@ -1,3 +1,9 @@
+## v1.5.0 (2023-04-19)
+
+### Feat
+
+- Add continuous-enrichment method for testing dbBact term enrichment without performing a prior differential abundance test (based on ASV frequencies)
+
 ## v1.4.0 (2022-05-22)
 
 ### Feat
