@@ -1,6 +1,9 @@
 # q2-dbbact
 A [Qiime2](https://qiime2.org/) plugin for [dbBact](http://dbbact.org)
 
+## Reference
+[Achieving pan-microbiome biological insights via the dbBact knowledge base (Nucleic Acids Research, 2023)](https://doi.org/10.1093/nar/gkad527)
+
 ![wordcloud](https://github.com/amnona/q2-dbbact/blob/main/pics/cfs-wordcloud.jpg)
 ![enriched barplot](https://github.com/amnona/q2-dbbact/blob/main/pics/enriched_terms.jpg)
 ![heatmap](https://github.com/amnona/q2-dbbact/blob/main/pics/heatmap.jpg)
